@@ -1,0 +1,16 @@
+## NECESSARY JOB SPECIFICATIONS
+#BSUB -J OneWayGAN
+#BSUB -L /bin/bash
+#BSUB -W 24:00
+#BSUB -n 1
+#BSUB -R "span[ptile=10]"
+#BSUB -R "rusage[mem=50000]"
+#BSUB -M 50000
+#BSUB -o OneWayGANOutput.%J
+
+## First Executable Line
+cd $SCRATCH
+module load Anaconda/3-5.0.0.1
+source activate deepPhoto
+python 1WayGAN.py
+
