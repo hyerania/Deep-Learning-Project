@@ -1,4 +1,9 @@
+
 # coding: utf-8
+
+# In[ ]:
+
+
 import torch
 import torchvision
 import torchvision.transforms as transforms
@@ -9,18 +14,21 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import skimage.color
-import pytorch_ssim
 from torch import autograd
 from torch.autograd import Variable
 from torchvision.utils import save_image
 from scipy.misc import toimage
-import pytorch_ssim
 
 device = torch.device('cuda')     # Default CUDA device
+Tensor_gpu = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 Tensor = torch.FloatTensor
 
 
 # ### Parameters
+
+# In[ ]:
+
+
 SIZE = 512
 BETA1 = 0.5
 BETA2 = 0.999
@@ -33,6 +41,10 @@ TRAIN_NUM = 50
 
 
 # ### Generator Network
+
+# In[ ]:
+
+
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
@@ -162,6 +174,10 @@ class Generator(nn.Module):
 
 
 # ### Discriminator Network
+
+# In[ ]:
+
+
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
@@ -223,11 +239,23 @@ class Discriminator(nn.Module):
         
         return x
 
+
+# In[ ]:
+
+
 generator1 = Generator()
 discriminator = Discriminator()
 
+if torch.cuda.is_available():
+    generator1.to(device)
+    discriminator.to(device)
+
 
 # ### Loading Training and Test Set Data
+
+# In[ ]:
+
+
 # Converting the images for PILImage to tensor, so they can be accepted as the input to the network
 print("Loading Dataset")
 transform = transforms.Compose([transforms.Resize((SIZE,SIZE), interpolation=2),transforms.ToTensor()])
@@ -244,6 +272,9 @@ testset_gt =torchvision.datasets.ImageFolder(root='./images_LR/Expert-C/Testing/
 trainset_1_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Training1/', transform=transform, target_transform=None)    
 trainset_2_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Training2/', transform=transform, target_transform=None)    
 testset_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Testing/', transform=transform, target_transform=None)
+
+
+# In[ ]:
 
 
 class ConcatDataset(torch.utils.data.Dataset):
@@ -289,6 +320,10 @@ print("Finished loading dataset")
 
 
 # ### MSE Loss and Optimizer
+
+# In[ ]:
+
+
 criterion = nn.MSELoss()
 
 optimizer_g1 = optim.Adam(generator1.parameters(), lr = 0.001, betas=(BETA1,BETA2))
@@ -297,11 +332,15 @@ optimizer_d = optim.Adam(discriminator.parameters(), lr = 0.001, betas=(BETA1,BE
 
 # ### Gradient Penalty
 # Computes gradient penalty loss for A-WGAN
+
+# In[ ]:
+
+
 def computeGradientPenalty(D, realSample, fakeSample):
-    alpha = Tensor(np.random.random((realSample.shape)))
+    alpha = Tensor_gpu(np.random.random((realSample.shape)))
     interpolates = (alpha * realSample + ((1 - alpha) * fakeSample)).requires_grad_(True)
     dInterpolation = D(interpolates)
-    fakeOutput = Variable(Tensor(realSample.shape[0],1,1,1).fill_(1.0), requires_grad=False)
+    fakeOutput = Variable(Tensor_gpu(realSample.shape[0],1,1,1).fill_(1.0), requires_grad=False)
     
     gradients = autograd.grad(
         outputs = dInterpolation,
@@ -316,7 +355,7 @@ def computeGradientPenalty(D, realSample, fakeSample):
     normGradients = gradients.norm(2, dim=1)-1
     for i in range(len(normGradients)):
         if(normGradients[i] > 0):
-            maxVals.append(normGradients[i].detach().numpy())
+            maxVals.append(Variable(normGradients[i].type(Tensor)).detach().numpy())
         else:
             maxVals.append(0)
 
@@ -325,6 +364,10 @@ def computeGradientPenalty(D, realSample, fakeSample):
 
 
 # ### Generator Loss
+
+# In[ ]:
+
+
 def generatorAdversarialLoss( output_images):
     validity = discriminator(output_images)
     gen_adv_loss = torch.mean(validity)
@@ -343,11 +386,19 @@ def computeGeneratorLoss(inputs, outputs_g1):
 
 
 # ### Discriminator Loss
+
+# In[ ]:
+
+
 def discriminatorLoss(d1Real, d1Fake, gradPenalty):
     return (torch.mean(d1Fake) - torch.mean(d1Real)) + (LAMBDA*gradPenalty)
 
 
 # ## Generator Training Loop
+
+# In[ ]:
+
+
 # trained on the first 2250 images
 print("Generator training loop starting")
 batches_done = 0
@@ -357,12 +408,14 @@ for epoch in range(NUM_EPOCHS):
     for i,  (target, input) in enumerate(trainLoader1, 0):
         unenhanced_image = input[0]
         enhanced_image = target[0] 
+        unenhanced = Variable(unenhanced_image.type(Tensor_gpu))
+        enhanced = Variable(enhanced_image.type(Tensor_gpu))
         
         optimizer_g1.zero_grad()
         
-        generated_enhanced_image = generator1(enhanced_image)
+        generated_enhanced_image = generator1(enhanced)
         
-        loss = torch.log10(criterion(generated_enhanced_image, enhanced_image))
+        loss = torch.log10(criterion(generated_enhanced_image, enhanced))
         loss.backward()
         optimizer_g1.step()
         
@@ -373,18 +426,24 @@ for epoch in range(NUM_EPOCHS):
         if i % 200 == 199:    # print every 200 mini-batches
             print('[%d, %5d] loss: %.5f' % (epoch + 1, i + 1, running_loss / 2))
             running_loss = 0.0
-            torch.save(generater1.state_dict(), './gan1_pretrain_'+ i + '.pth')
+            torch.save(generator1.state_dict(), './gan1_pretrain_'+ i + '.pth')
 print("Generator training loop ended")
 
 
 # ### Training Network
+
+# In[ ]:
+
+
 batches_done = 0
+generator1.cuda()
+discriminator.cuda()
 for epoch in range(NUM_EPOCHS):
     for i, (data, gt1) in enumerate(trainLoader_cross, 0):
         input, dummy = data
         groundTruth, dummy = gt1
-        trainInput = Variable(input.type(Tensor))
-        realImgs = Variable(groundTruth.type(Tensor))
+        trainInput = Variable(input.type(Tensor_gpu))
+        realImgs = Variable(groundTruth.type(Tensor_gpu))
         
         ### TRAIN DISCRIMINATOR
         optimizer_d.zero_grad()
@@ -421,12 +480,17 @@ for epoch in range(NUM_EPOCHS):
                 save_image(fake_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
 
         batches_done += 1
-        torch.save(generater1_train.state_dict(), './gan1_train_'+ i + '.pth')
+        torch.save(generator1_train.state_dict(), './gan1_train_'+ i + '.pth')
         print("Done training generator on iteration: %d" % (i))    
 
 
 # ## Test Network
+
+# In[ ]:
+
+
 def imshowOutput(img, i):
+    img = Variable(img.type(Tensor))
     npimg = img.numpy()
     plt.savefig('TestSet_%d.tif' % i)
     
@@ -435,11 +499,14 @@ with torch.no_grad():
     for i, (gt, data) in enumerate(testLoader, 0):
         input, dummy = data
         groundTruth, dummy = gt
-        output = generator1(input)
-        loss = criterion(output, groundTruth)
+        trainInput = Variable(input.type(Tensor_gpu))
+        realImgs = Variable(groundTruth.type(Tensor_gpu))
+        output = generator1(trainInput)
+        loss = criterion(output, realImgs)
         psnr = 10*torch.log10(1/loss)
         psnrAvg += psnr
-        for i in range(output.shape[0]):
-            imshowOutput(output[i,...], i)
+        for j in range(output.shape[0]):
+            imshowOutput(output[j,...], j)
         print("PSNR Avg: %d" % (psnrAvg / (i+1)))
     print("Final PSNR Avg: %d" % (psnrAvg / len(testLoader)))
+
