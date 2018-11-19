@@ -595,7 +595,7 @@ for epoch in range(NUM_EPOCHS):
         running_loss2 += loss2.item()
         running_losslist1.append(loss1.item())
         running_losslist2.append(loss2.item())
-        f = open("two_logPreTraining.txt","a+")
+        f = open("2WayLog_PreTraining.txt","a+")
         f.write('[%d, %5d] loss1: %.5f  loss2: %.5f\n'  % (epoch + 1, i + 1, loss1.item(), loss2.item()))
         f.close()
 
@@ -606,14 +606,14 @@ for epoch in range(NUM_EPOCHS):
             torch.save(generator1.state_dict(), './two_gan1_pretrain'+ str(i) +'.pth')
             torch.save(generator2.state_dict(), './two_gan2_pretrain'+ str(i) + '.pth')
 
-f = open("log_twoPreTrainingLossList1.txt","a+")
+f = open("2WayLog_PreTraining_LossList1.txt","a+")
 for item in running_losslist1:
-    f.write('%d\n' % (item))
+    f.write('%f\n' % (item))
 f.close()
 
-f = open("log_twoPreTrainingLossList2.txt","a+")
+f = open("2WayLog_PreTraining_LossList2.txt","a+")
 for item in running_losslist2:
-    f.write('%d\n' % (item))
+    f.write('%f\n' % (item))
 f.close()
 
 # ## Training Network
@@ -645,7 +645,7 @@ for epoch in range(NUM_EPOCHS):
         optimizer_d.zero_grad()
         # generator 1
         fakeImgs1 = generator1(input)
-        res_learn_out1 = fake_imgs1 + input
+        res_learn_out1 = fakeImgs1 + input
         realValid1 = discriminator(realImgs1)
         fakeValid1 = discriminator(res_learn_out1)
         gradientPenalty1 = computeGradientPenalty(discriminator, realImgs1.data, fakeImgs1.data)
@@ -653,7 +653,7 @@ for epoch in range(NUM_EPOCHS):
         
         # generator 2
         fakeImgs2 = generator2(groundTruth2)
-        res_learn_out2 = fake_imgs2 + groundTruth2
+        res_learn_out2 = fakeImgs2 + groundTruth2
         realValid2 = discriminator(realImgs2)
         fakeValid2 = discriminator(res_learn_out2)
         gradientPenalty2 = computeGradientPenalty(discriminator, realImgs2.data, fakeImgs2.data)
@@ -704,13 +704,13 @@ for epoch in range(NUM_EPOCHS):
             
     
             print("[Epoch %d/%d] [Batch %d/%d] [D loss: |%f] [G1 loss: %f] [G2 loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainloader2_inp), dLoss.item(), gLoss1.item(), gLoss2.item(), gLoss.item()))
-            f = open("two_logStatus.txt","a+")
+            f = open("2WayLog_Train.txt","a+")
             f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: |%f] [G1 loss: %f] [G2 loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainloader2_inp), dLoss.item(), gLoss1.item(), gLoss2.item(), gLoss.item()))
             f.close()
             
             if batches_done % 200 == 0:
-                save_image(res_learn_out1.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
-                save_image(res_learn_out2.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(res_learn_out1.data[:25], "images/two_%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(res_learn_out2.data[:25], "images/two_%d.png" % batches_done, nrow=5, normalize=True)
                 torch.save(generator1.state_dict(), './two_gan1'+ str(i)+'.pth')
                 torch.save(generator2.state_dict(), './two_gan2'+ str(i) + '.pth')
                 torch.save(discriminator.state_dict(), './two_discriminator'+ str(i) + '.pth')
