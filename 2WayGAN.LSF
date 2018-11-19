@@ -16,5 +16,5 @@
 # First Executable Line
 module load Anaconda/3-5.0.0.1 CUDA
 source activate /scratch/user/v3ntinty/.conda/envs/deepPhotoEnhancer
-python 2WayGAN_TrainOnly.py
+python 2WayGAN.py
 source deactivate
