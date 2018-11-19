@@ -423,17 +423,17 @@ for epoch in range(NUM_EPOCHS):
         # print statistics
         running_loss += loss.item()
         running_losslist.append(loss.item())
-        f = open("logPreTraining.txt","a+")
+        f = open("log_PreTraining.txt","a+")
         f.write("[Epoch %d/%d] [Batch %d/%d] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader1), loss.item()))
         f.close()
         if i % 225 == 224:    # print every 200 mini-batches
-            print('[%d, %5d] loss: %.5f' % (epoch + 1, i + 1, running_loss / 2))
+            print('[%d, %5d] loss: %.5f' % (epoch + 1, i + 1, running_loss / 225))
             running_loss = 0.0
             torch.save(generator1.state_dict(), './gan1_pretrain_'+ str(epoch) + '_' + str(i) + '.pth')
 
-f = open("logPreTrainingLossList.txt","a+")
+f = open("log_PreTraining_LossList.txt","a+")
 for item in running_losslist:
-    f.write('%d\n' % (item))
+    f.write('%f\n' % (item))
 f.close()
 
 print("Generator training loop ended")
@@ -480,13 +480,13 @@ for epoch in range(NUM_EPOCHS):
             gLoss.backward()
             optimizer_g1.step()
     
-            print("[Epoch %d/%d] [Batch %d/%d] [D loss: |%f] [G loss: %f]" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
-            f = open("logStatus.txt","a+")
-            f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: |%f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
+            print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
+            f = open("log_Train.txt","a+")
+            f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
             f.close()
             
             if batches_done % 200 == 0:
-                save_image(fake_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(fake_imgs.data[:25], "images/1way_%d.png" % batches_done, nrow=5, normalize=True)
                 torch.save(generator1.state_dict(), './gan1_train_'+ str(epoch) + '_' + str(i) + '.pth')
                 torch.save(discriminator.state_dict(), './discriminator_train_'+ str(epoch) + '_' + str(i) + '.pth')
 
@@ -517,6 +517,6 @@ with torch.no_grad():
         psnrAvg += psnr
         for j in range(output.shape[0]):
             imshowOutput(output[j,...], j)
-        print("PSNR Avg: %d" % (psnrAvg / (i+1)))
-    print("Final PSNR Avg: %d" % (psnrAvg / len(testLoader)))
+        print("PSNR Avg: %f" % (psnrAvg / (i+1)))
+    print("Final PSNR Avg: %f" % (psnrAvg / len(testLoader)))
 
