@@ -402,9 +402,9 @@ trainset_2_gt =torchvision.datasets.ImageFolder(root='./images_LR/Expert-C/Train
 testset_gt =torchvision.datasets.ImageFolder(root='./images_LR/Expert-C/Testing/', transform=transform, target_transform=None)    
 
 # Converting the images for PILImage to tensor, so they can be accepted as the input to the network
-trainset_1_inp =torchvision.datasets.ImageFolder(root='./images_LR/tif-images/Training1/', transform=transform, target_transform=None)    
-trainset_2_inp =torchvision.datasets.ImageFolder(root='./images_LR/tif-images/Training2/', transform=transform, target_transform=None)    
-testset_inp =torchvision.datasets.ImageFolder(root='./images_LR/tif-images/Testing/', transform=transform, target_transform=None)    
+trainset_1_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Training1/', transform=transform, target_transform=None)    
+trainset_2_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Training2/', transform=transform, target_transform=None)    
+testset_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Testing/', transform=transform, target_transform=None)    
 
 
 # In[7]:
@@ -566,6 +566,8 @@ def discriminatorLoss(d1Real, d1Fake, gradPenalty):
 batches_done = 0
 running_loss1 = 0.0
 running_loss2 = 0.0
+running_losslist1 = []
+running_losslist2 = []
 for epoch in range(NUM_EPOCHS):
     for i,  (target, input) in enumerate(trainLoader1, 0):
 #         print(i)
@@ -578,29 +580,41 @@ for epoch in range(NUM_EPOCHS):
         
         optimizer_g1.zero_grad()
         
-        generated_enhanced_image = generator1(unenhanced_image)
-        generated_unenhanced_image = generator2(enhanced_image)
-        
-#         print(generated_enhanced_image)
-#         print(generated_unenhanced_image)
+        generated_enhanced_image = generator1(unenhanced)
         loss1 = torch.log10(criterion(generated_enhanced_image, enhanced))
-        loss2 = torch.log10(criterion(generated_unenhanced_image, unenhanced))
         loss1.backward()
-        loss2.backward()
         optimizer_g1.step()
+
+        generated_unenhanced_image = generator2(enhanced)
+        loss2 = torch.log10(criterion(generated_unenhanced_image, unenhanced))
+        loss2.backward()
         optimizer_g2.step()
-        
+
         # print statistics
         running_loss1 += loss1.item()
-        running_loss1 += loss1.item()
-#         if i % 225 == 224:    # print every 2000 mini-batches
-        print('[%d, %5d] loss1: %.5f  loss2: %.5f'  %
-              (epoch + 1, i + 1, running_loss1 / 225, running_loss2 / 225))
-        running_loss1 = 0.0
-        running_loss2 = 0.0
-        torch.save(generator1.state_dict(), './gan1_pretrain'+ i+'.pth')
-        torch.save(generator2.state_dict(), './gan2_pretrain'+ i + '.pth')
+        running_loss2 += loss2.item()
+        running_losslist1.append(loss1.item())
+        running_losslist2.append(loss2.item())
+        f = open("two_logPreTraining.txt","a+")
+        f.write('[%d, %5d] loss1: %.5f  loss2: %.5f\n'  % (epoch + 1, i + 1, loss1.item(), loss2.item()))
+        f.close()
 
+        if i % 225 == 224:    # print every 2000 mini-batches
+            print('[%d, %5d] loss1: %.5f  loss2: %.5f\n'  % (epoch + 1, i + 1, running_loss1 / 225, running_loss2 / 225))
+            running_loss1 = 0.0
+            running_loss2 = 0.0
+            torch.save(generator1.state_dict(), './two_gan1_pretrain'+ str(i) +'.pth')
+            torch.save(generator2.state_dict(), './two_gan2_pretrain'+ str(i) + '.pth')
+
+f = open("log_twoPreTrainingLossList1.txt","a+")
+for item in running_losslist1:
+    f.write('%d\n' % (item))
+f.close()
+
+f = open("log_twoPreTrainingLossList2.txt","a+")
+for item in running_losslist2:
+    f.write('%d\n' % (item))
+f.close()
 
 # ## Training Network
 # 
@@ -634,81 +648,72 @@ for epoch in range(NUM_EPOCHS):
         res_learn_out1 = fake_imgs1 + input
         realValid1 = discriminator(realImgs1)
         fakeValid1 = discriminator(res_learn_out1)
-         # generator 2
+        gradientPenalty1 = computeGradientPenalty(discriminator, realImgs1.data, fakeImgs1.data)
+        dLoss1 = discriminatorLoss(realValid1, fakeValid1, gradientPenalty1)
+        
+        # generator 2
         fakeImgs2 = generator2(groundTruth2)
         res_learn_out2 = fake_imgs2 + groundTruth2
         realValid2 = discriminator(realImgs2)
         fakeValid2 = discriminator(res_learn_out2)
-
-        gradientPenalty1 = computeGradientPenalty(discriminator, realImgs1.data, fakeImgs1.data)
         gradientPenalty2 = computeGradientPenalty(discriminator, realImgs2.data, fakeImgs2.data)
-        dLoss1 = discriminatorLoss(realValid1, fakeValid1, gradientPenalty1)
         dLoss2 = discriminatorLoss(realValid2, fakeValid2, gradientPenalty2)
+
         dLoss = (dLoss1 + dLoss2)/2
         dLoss.backward()
+
         optimizer_d.step()
-        
-        
         optimizer_g1.zero_grad()
         optimizer_g2.zero_grad()
         
-        if TRAIN_NUM % 50 == 0:
+        if batches_done % 50 == 0:
             ### TRAIN FORWARD
             print("Training Generator on Iteration: %d" % (i))
             # Generate a batch of images
             generator1.changeDirection(1)
-            generator1.changeDirection(1)
+            generator2.changeDirection(1)
             fake_imgs_g1f = generator1(input)
             res_out_g1f = fake_imgs_g1f + input
-            
+            gLoss1 = computeGeneratorLoss(input,res_out_g1f)
+
             # generator 2
             fake_imgs_g2f = generator2(res_out_g1)
             res_out_g2f = fake_imgs_g2f + res_out_g1f
-            
+            consistency1 = computeConsistencyLoss(input, res_out_g2f)
 
             ### TRAIN BACKWARD
             print("Training Generator on Iteration: %d" % (i))
             #change the batch normalizations
             generator1.changeDirection(2)
-            generator1.changeDirection(2)
+            generator2.changeDirection(2)
             # Generate a batch of images
             fake_imgs_g2b = generator2(groundTruth2)
             res_out_g2b = fake_imgs_g2b + groundTruth2
-            
+            gLoss2 = computeGeneratorLoss(groundTruth2,res_out_g2b)
+
             # generator 1
             fake_imgs_g1b = generator1(res_out_g2b)
             res_out_g1b = fake_imgs_g1b + res_out_g2b
-            
+            consistency2 = computeConsistencyLoss(groundTruth2, res_out_g1b)
 
             #losses
-            gLoss1 = computeGeneratorLoss(input,res_out_g1f)
-            gLoss2 = computeGeneratorLoss(groundTruth2,res_out_g2b)
-            consistency1 = computeConsistencyLoss(input, res_out_g2f)
-            consistency2 = computeConsistencyLoss(groundTruth2, res_out_g1b)
             gLoss = gLoss1 + gLoss2 + 10*ALPHA*(consistency1+ consistency2)
             gLoss.backward()
             optimizer_g1.step()
             optimizer_g2.step()
             
     
-            print("[Epoch %d/%d] [Batch %d/%d] [D loss: |%f] [G1 loss: %f] [G2 loss: %f] [G loss: %f]" % (epoch, NUM_EPOCHS , i, len(trainloader2_inp), dLoss.item(), gLoss1.item(), gLoss2.item(), gLoss.item()))
-            f = open("logStatus.txt","a+")
+            print("[Epoch %d/%d] [Batch %d/%d] [D loss: |%f] [G1 loss: %f] [G2 loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainloader2_inp), dLoss.item(), gLoss1.item(), gLoss2.item(), gLoss.item()))
+            f = open("two_logStatus.txt","a+")
             f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: |%f] [G1 loss: %f] [G2 loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainloader2_inp), dLoss.item(), gLoss1.item(), gLoss2.item(), gLoss.item()))
             f.close()
             
             if batches_done % 200 == 0:
                 save_image(res_learn_out1.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
                 save_image(res_learn_out2.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
-            batches_done += TRAIN_NUM
-            print("Done training generator on iteration: %d" % (i))
-            torch.save(generator1.state_dict(), './gan1'+ i+''.pth')
-            torch.save(generator2.state_dict(), './gan2'+ i + '.pth')
-            torch.save(discriminator.state_dict(), './discriminator'+ i + '.pth')
+                torch.save(generator1.state_dict(), './two_gan1'+ str(i)+'.pth')
+                torch.save(generator2.state_dict(), './two_gan2'+ str(i) + '.pth')
+                torch.save(discriminator.state_dict(), './two_discriminator'+ str(i) + '.pth')
             
-
-
-# In[ ]:
-
-
-
-
+        batches_done += 1
+        print("Done training generator on iteration: %d" % (i))
