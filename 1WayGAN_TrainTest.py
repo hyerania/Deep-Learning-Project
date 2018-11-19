@@ -423,10 +423,19 @@ for epoch in range(NUM_EPOCHS):
         # print statistics
         running_loss += loss.item()
         running_losslist.append(loss.item())
-        if i % 200 == 199:    # print every 200 mini-batches
+        f = open("logPreTraining.txt","a+")
+        f.write("[Epoch %d/%d] [Batch %d/%d] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader1), loss.item()))
+        f.close()
+        if i % 225 == 224:    # print every 200 mini-batches
             print('[%d, %5d] loss: %.5f' % (epoch + 1, i + 1, running_loss / 2))
             running_loss = 0.0
-            torch.save(generator1.state_dict(), './gan1_pretrain_'+ i + '.pth')
+            torch.save(generator1.state_dict(), './gan1_pretrain_'+ str(epoch) + '_' + str(i) + '.pth')
+
+f = open("logPreTrainingLossList.txt","a+")
+for item in running_losslist:
+    f.write('%d\n' % (item))
+f.close()
+
 print("Generator training loop ended")
 
 
@@ -478,9 +487,10 @@ for epoch in range(NUM_EPOCHS):
             
             if batches_done % 200 == 0:
                 save_image(fake_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
+                torch.save(generator1.state_dict(), './gan1_train_'+ str(epoch) + '_' + str(i) + '.pth')
+                torch.save(discriminator.state_dict(), './discriminator_train_'+ str(epoch) + '_' + str(i) + '.pth')
 
         batches_done += 1
-        torch.save(generator1_train.state_dict(), './gan1_train_'+ i + '.pth')
         print("Done training generator on iteration: %d" % (i))    
 
 
