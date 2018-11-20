@@ -35,7 +35,7 @@ BETA2 = 0.999
 LAMBDA = 10
 ALPHA = 1000
 BATCH_SIZE = 5
-NUM_EPOCHS = 5
+NUM_EPOCHS = 50
 LATENT_DIM = 100
 TRAIN_NUM = 50
 
@@ -447,7 +447,7 @@ print("Generator training loop ended")
 batches_done = 0
 generator1.cuda()
 discriminator.cuda()
-for epoch in range(NUM_EPOCHS):
+for epoch in range(NUM_EPOCHS*2):
     for i, (data, gt1) in enumerate(trainLoader_cross, 0):
         input, dummy = data
         groundTruth, dummy = gt1
@@ -486,7 +486,7 @@ for epoch in range(NUM_EPOCHS):
             f.close()
             
             if batches_done % 200 == 0:
-                save_image(fake_imgs.data[:25], "images/1way_%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(fake_imgs.data[:25], "images/1Way_Train_%d.png" % batches_done, nrow=5, normalize=True)
                 torch.save(generator1.state_dict(), './gan1_train_'+ str(epoch) + '_' + str(i) + '.pth')
                 torch.save(discriminator.state_dict(), './discriminator_train_'+ str(epoch) + '_' + str(i) + '.pth')
 
@@ -515,8 +515,9 @@ with torch.no_grad():
         loss = criterion(output, realImgs)
         psnr = 10*torch.log10(1/loss)
         psnrAvg += psnr
-        for j in range(output.shape[0]):
-            imshowOutput(output[j,...], j)
+        save_image(output.data[:25], "images/1Way_Test_%d.png" % i, nrow=5, normalize=True)
+        # for j in range(output.shape[0]):
+            # imshowOutput(output[j,...], j)
         print("PSNR Avg: %f" % (psnrAvg / (i+1)))
     print("Final PSNR Avg: %f" % (psnrAvg / len(testLoader)))
 

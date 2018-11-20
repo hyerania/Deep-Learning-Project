@@ -34,7 +34,7 @@ BETA2 = 0.999
 LAMBDA = 10
 ALPHA = 1000
 BATCH_SIZE = 5
-NUM_EPOCHS = 5
+NUM_EPOCHS = 50
 LATENT_DIM = 100
 TRAIN_NUM = 50
 
@@ -709,11 +709,30 @@ for epoch in range(NUM_EPOCHS):
             f.close()
             
             if batches_done % 200 == 0:
-                save_image(res_learn_out1.data[:25], "images/two_%d.png" % batches_done, nrow=5, normalize=True)
-                save_image(res_learn_out2.data[:25], "images/two_%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(res_learn_out1.data[:25], "images/two_Train_%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(res_learn_out2.data[:25], "images/two_Train_%d.png" % batches_done, nrow=5, normalize=True)
                 torch.save(generator1.state_dict(), './two_gan1'+ str(i)+'.pth')
                 torch.save(generator2.state_dict(), './two_gan2'+ str(i) + '.pth')
                 torch.save(discriminator.state_dict(), './two_discriminator'+ str(i) + '.pth')
             
         batches_done += 1
         print("Done training generator on iteration: %d" % (i))
+
+
+# Test Network
+with torch.no_grad():
+    psnrAvg = 0.0
+    for i, (gt, data) in enumerate(testLoader, 0):
+        input, dummy = data
+        groundTruth, dummy = gt
+        trainInput = Variable(input.type(Tensor_gpu))
+        realImgs = Variable(groundTruth.type(Tensor_gpu))
+        output = generator1(trainInput)
+        loss = criterion(output, realImgs)
+        psnr = 10*torch.log10(1/loss)
+        psnrAvg += psnr
+        save_image(output.data[:25], "images/two_Test_%d.png" % i, nrow=5, normalize=True)
+        # for j in range(output.shape[0]):
+            # imshowOutput(output[j,...], j)
+        print("PSNR Avg: %f" % (psnrAvg / (i+1)))
+    print("Final PSNR Avg: %f" % (psnrAvg / len(testLoader)))
