@@ -35,7 +35,7 @@ BETA2 = 0.999
 LAMBDA = 10
 ALPHA = 1000
 BATCH_SIZE = 10
-NUM_EPOCHS = 50
+NUM_EPOCHS = 20
 LATENT_DIM = 100
 TRAIN_NUM = 50
 LEARNING_RATE = 0.0001
@@ -395,10 +395,7 @@ def discriminatorLoss(d1Real, d1Fake, gradPenalty):
     return (torch.mean(d1Fake) - torch.mean(d1Real)) + (LAMBDA*gradPenalty)
 
 
-# ## Generator Training Loop
-
-# In[ ]:
-
+# ## Generator Pre-Training Loop
 
 print("Generator training loop starting")
 batches_done = 0
@@ -429,29 +426,27 @@ for epoch in range(NUM_EPOCHS):
         if i % 225 == 224:    # print every 200 mini-batches
             print('[%d, %5d] loss: %.5f' % (epoch + 1, i + 1, running_loss / 225))
             running_loss = 0.0
+            save_image(generated_enhanced_image.data[:25], "images/ga1_pretrain_%d_%d.png" % (epoch,i), nrow=5, normalize=True)
             torch.save(generator1.state_dict(), './gan1_pretrain_'+ str(epoch) + '_' + str(i) + '.pth')
-            save_image(generated_enhanced_image.data[:25], "images/ga1_pretrain_%d%d.png" % (epoch,i), nrow=5, normalize=True)
 f = open("log_PreTraining_LossList.txt","a+")
 for item in running_losslist:
     f.write('%f\n' % (item))
 f.close()
 
 print("Generator training loop ended")
-
-# plotting the loss
-print(len(running_losslist))
-axes = plt.gca()
+x_vals = np.arange(0, len(running_losslist))
+fig, ax1 = plt.subplots(figsize=(12, 12))
+plt.plot(x_vals, running_losslist)
 plt.xlabel("iteration")
 plt.ylabel("error")
-plt.savefig("gen1_pretrain")
-plt.show()
+every_nth = 500
+for n, label in enumerate(ax1.yaxis.get_ticklabels()):
+    if n % every_nth != 0:
+        label.set_visible(False)
+plt.savefig('PreTrainLoss')
 
 
 # ### Training Network
-
-# In[ ]:
-
-
 # batches_done = 0
 
 # for epoch in range(NUM_EPOCHS*2):
@@ -507,27 +502,27 @@ plt.show()
 
 
 
-def imshowOutput(img, i):
-    img = Variable(img.type(Tensor))
-    npimg = img.numpy()
-    plt.savefig('TestSet_%d.tif' % i)
+# def imshowOutput(img, i):
+#     img = Variable(img.type(Tensor))
+#     npimg = img.numpy()
+#     plt.savefig('TestSet_%d.tif' % i)
 
-with torch.no_grad():
-    psnrAvg = 0.0
-    for i, (gt, data) in enumerate(testLoader, 0):
-        input, dummy = data
-        groundTruth, dummy = gt
-        trainInput = Variable(input.type(Tensor_gpu))
-        realImgs = Variable(groundTruth.type(Tensor_gpu))
-        output = generator1(trainInput)
-        loss = criterion(output, realImgs)
-        psnr = 10*torch.log10(1/loss)
-        psnrAvg += psnr
-        save_image(output.data[:25], "images/1Way_Test_%d.png" % i, nrow=5, normalize=True)
-        # for j in range(output.shape[0]):
-            # imshowOutput(output[j,...], j)
-        print("PSNR Avg: %f" % (psnrAvg / (i+1)))
-    print("Final PSNR Avg: %f" % (psnrAvg / len(testLoader)))
+# with torch.no_grad():
+#     psnrAvg = 0.0
+#     for i, (gt, data) in enumerate(testLoader, 0):
+#         input, dummy = data
+#         groundTruth, dummy = gt
+#         trainInput = Variable(input.type(Tensor_gpu))
+#         realImgs = Variable(groundTruth.type(Tensor_gpu))
+#         output = generator1(trainInput)
+#         loss = criterion(output, realImgs)
+#         psnr = 10*torch.log10(1/loss)
+#         psnrAvg += psnr
+#         save_image(output.data[:25], "images/1Way_Test_%d.png" % i, nrow=5, normalize=True)
+#         # for j in range(output.shape[0]):
+#             # imshowOutput(output[j,...], j)
+#         print("PSNR Avg: %f" % (psnrAvg / (i+1)))
+#     print("Final PSNR Avg: %f" % (psnrAvg / len(testLoader)))
 
 
 # In[ ]:
