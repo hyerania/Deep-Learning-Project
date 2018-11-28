@@ -20,7 +20,8 @@ from torchvision.utils import save_image
 from scipy.misc import toimage
 
 device = torch.device('cuda')     # Default CUDA device
-Tensor_gpu = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+# Tensor_gpu = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+Tensor_gpu = torch.FloatTensor
 Tensor = torch.FloatTensor
 
 
@@ -34,17 +35,14 @@ BETA1 = 0.5
 BETA2 = 0.999
 LAMBDA = 10
 ALPHA = 1000
-BATCH_SIZE = 5
+BATCH_SIZE = 3
 NUM_EPOCHS = 25
 LATENT_DIM = 100
 TRAIN_NUM = 50
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.00001
 
 
 # ### Generator Network
-
-# In[3]:
-
 
 class Generator(nn.Module):
     def __init__(self):
@@ -254,9 +252,9 @@ discriminator = Discriminator()
 
 
 
-if torch.cuda.is_available():
-    generator1.to(device)
-    discriminator.to(device)
+# if torch.cuda.is_available():
+#     generator1.to(device)
+#     discriminator.to(device)
 
 
 # ### Loading Training and Test Set Data
@@ -379,7 +377,7 @@ def computeGradientPenalty(D, realSample, fakeSample):
 def generatorAdversarialLoss( output_images):
     validity = discriminator(output_images)
     gen_adv_loss = torch.mean(validity)
-    
+    # print("Validity!: ", gen_adv_loss)
     return gen_adv_loss
 
 
@@ -390,7 +388,7 @@ def computeGeneratorLoss(inputs, outputs_g1):
     i_loss = criterion(inputs, outputs_g1)
     gen_loss = -gen_adv_loss1 + ALPHA*i_loss
     
-    return gen_loss
+    return gen_loss, gen_adv_loss1
 
 
 # ### Discriminator Loss
@@ -469,37 +467,37 @@ for epoch in range(NUM_EPOCHS*2):
         optimizer_g1.zero_grad()
         fake_imgs = generator1(trainInput)
         residual_learning_output = fake_imgs + trainInput
-        gLoss = computeGeneratorLoss(trainInput,residual_learning_output)
+        gLoss, gAdvLoss = computeGeneratorLoss(trainInput,residual_learning_output)
 
         gLoss.backward()
         optimizer_g1.step()
 
         ### TRAIN DISCRIMINATOR
-        for j in range(50):
-            optimizer_d.zero_grad()
-            fakeImgs = generator1(trainInput)
+        optimizer_d.zero_grad()
+        # fakeImgs = generator1(trainInput)
 
-            # # Real Images
-            realValid = discriminator(realImgs)
-            # Fake Images
-            fakeValid = discriminator(fakeImgs)
+        # # Real Images
+        realValid = discriminator(realImgs)
+        # Fake Images
+        fakeValid = discriminator(residual_learning_output)
 
-            gradientPenalty = computeGradientPenalty(discriminator, realImgs.data, fakeImgs.data)
-            dLoss = discriminatorLoss(realValid, fakeValid, gradientPenalty)
-            dLoss.backward()
-            optimizer_d.step()
+        gradientPenalty = computeGradientPenalty(discriminator, realImgs.data, residual_learning_output.data)
+        dLoss = discriminatorLoss(realValid, fakeValid, gradientPenalty)
+        dLoss.backward(retain_graph=True)
+        optimizer_d.step()
 
-            print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
-            f = open("log_Train.txt","a+")
-            f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
-            f.close()
+        print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
+        f = open("log_Train.txt","a+")
+        f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
+        f.write("Validity:%f\n" % (gAdvLoss))
+        f.close()
 
-            if batches_done % 200 == 0:
-                save_image(fakeImgs.data[:25], "images/1Way_Train_%d.png" % batches_done, nrow=5, normalize=True)
-                torch.save(generator1.state_dict(), './gan1_train_'+ str(epoch) + '_' + str(i) + '.pth')
-                torch.save(discriminator.state_dict(), './discriminator_train_'+ str(epoch) + '_' + str(i) + '.pth')
+        if batches_done % 200 == 0:
+            save_image(residual_learning_output.data[:25], "images/1Way_Train_%d.png" % batches_done, nrow=5, normalize=True)
+            torch.save(generator1.state_dict(), './gan1_train_'+ str(epoch) + '_' + str(i) + '.pth')
+            torch.save(discriminator.state_dict(), './discriminator_train_'+ str(epoch) + '_' + str(i) + '.pth')
 
-            batches_done += 1
+        batches_done += 1
         print("Done training discriminator on iteration: %d" % (i))
 
 
