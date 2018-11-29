@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-
-# In[1]:
-
-
 import torch
 import torchvision
 import torchvision.transforms as transforms
@@ -24,21 +20,6 @@ Tensor_gpu = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Floa
 Tensor = torch.FloatTensor
 torch.manual_seed(25)
 
-# ### Parameters
-
-# In[2]:
-
-
-SIZE = 512
-BETA1 = 0.5
-BETA2 = 0.999
-LAMBDA = 10
-ALPHA = 1000
-BATCH_SIZE = 5
-NUM_EPOCHS = 25
-LATENT_DIM = 100
-TRAIN_NUM = 50
-LEARNING_RATE = 0.00001
 
 # custom weights initialization called on netG and netD
 def weights_init(m):
@@ -50,7 +31,24 @@ def weights_init(m):
         m.bias.data.fill_(0)
 
 
+# ### Parameters
+SIZE = 512
+BETA1 = 0.5
+BETA2 = 0.999
+LAMBDA = 10
+ALPHA = 1000
+BATCH_SIZE = 5
+NUM_EPOCHS_PRETRAIN = 25
+NUM_EPOCHS_TRAIN = 50
+LATENT_DIM = 100
+LEARNING_RATE = 0.0001
+
+
 # ### Generator Network
+
+# In[3]:
+
+
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
@@ -127,10 +125,11 @@ class Generator(nn.Module):
                 
     def forward(self, x):
         # input 512x512x3 to output 512x512x16
-        x = self.conv1_bn(F.selu(self.conv1(x)))
+        
+        x0 = self.conv1_bn(F.selu(self.conv1(x)))
 
         # input 512x512x16 to output 256x256x32
-        x1 = self.conv2_bn(F.selu(self.conv2(x)))
+        x1 = self.conv2_bn(F.selu(self.conv2(x0)))
 
         # input 256x256x32 to output 128x128x64
         x2 = self.conv3_bn(F.selu(self.conv3(x1)))
@@ -172,10 +171,11 @@ class Generator(nn.Module):
         xd = self.dconv4(self.dconv4_bn(F.selu(torch.cat([xd,x1],dim=1))))
 
         # input 512x512x48 to output 512x512x16
-        xd = self.conv8(self.conv8_bn(F.selu(torch.cat([xd,x],dim=1))))
+        xd = self.conv8(self.conv8_bn(F.selu(torch.cat([xd,x0],dim=1))))
 
         # input 512x512x16 to output 512x512x3
         xd = self.conv9(self.conv9_bn(F.selu((xd))))
+        xd = xd+ x
         return xd
 
 
@@ -245,12 +245,14 @@ class Discriminator(nn.Module):
         
         return x
 
+
+# In[5]:
+
+
 # generator1 = Generator()
 ### Pre Training LOAD
 generator1 = Generator()
-generator1.load_state_dict(torch.load('./gan1_pretrain_24_224.pth'))
-generator1.eval()
-
+generator1.apply(weights_init)
 discriminator = Discriminator()
 discriminator.apply(weights_init)
 
@@ -261,10 +263,6 @@ if torch.cuda.is_available():
 
 
 # ### Loading Training and Test Set Data
-
-# In[6]:
-
-
 # Converting the images for PILImage to tensor, so they can be accepted as the input to the network
 print("Loading Dataset")
 transform = transforms.Compose([transforms.Resize((SIZE,SIZE), interpolation=2),transforms.ToTensor()])
@@ -281,9 +279,6 @@ testset_gt =torchvision.datasets.ImageFolder(root='./images_LR/Expert-C/Testing/
 trainset_1_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Training1/', transform=transform, target_transform=None)    
 trainset_2_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Training2/', transform=transform, target_transform=None)    
 testset_inp =torchvision.datasets.ImageFolder(root='./images_LR/input/Testing/', transform=transform, target_transform=None)
-
-
-# In[7]:
 
 
 class ConcatDataset(torch.utils.data.Dataset):
@@ -329,20 +324,10 @@ print("Finished loading dataset")
 
 
 # ### MSE Loss and Optimizer
-
-# In[8]:
-
-
 criterion = nn.MSELoss()
 
 optimizer_g1 = optim.Adam(generator1.parameters(), lr = LEARNING_RATE, betas=(BETA1,BETA2))
 optimizer_d = optim.Adam(discriminator.parameters(), lr = LEARNING_RATE, betas=(BETA1,BETA2))
-
-
-# ### Gradient Penalty
-# Computes gradient penalty loss for A-WGAN
-
-# In[9]:
 
 
 def computeGradientPenalty(D, realSample, fakeSample):
@@ -380,7 +365,7 @@ def computeGradientPenalty(D, realSample, fakeSample):
 def generatorAdversarialLoss( output_images):
     validity = discriminator(output_images)
     gen_adv_loss = torch.mean(validity)
-    
+    # print("Validity!: ", gen_adv_loss)
     return gen_adv_loss
 
 
@@ -403,43 +388,42 @@ def discriminatorLoss(d1Real, d1Fake, gradPenalty):
     return (torch.mean(d1Fake) - torch.mean(d1Real)) + (LAMBDA*gradPenalty)
 
 
-# ## Generator Pre-Training Loop
+## Generator Pre-Training Loop
+print("Generator training loop starting")
+batches_done = 0
+running_loss = 0.0
+running_losslist = []
+for epoch in range(NUM_EPOCHS_PRETRAIN):
+    for i,  (target, input) in enumerate(trainLoader1, 0):
+        unenhanced_image = input[0]
+        enhanced_image = target[0]
+        unenhanced = Variable(unenhanced_image.type(Tensor_gpu))
+        enhanced = Variable(enhanced_image.type(Tensor_gpu))
 
-# print("Generator training loop starting")
-# batches_done = 0
-# running_loss = 0.0
-# running_losslist = []
-# for epoch in range(NUM_EPOCHS):
-#     for i,  (target, input) in enumerate(trainLoader1, 0):
-#         unenhanced_image = input[0]
-#         enhanced_image = target[0]
-#         unenhanced = Variable(unenhanced_image.type(Tensor_gpu))
-#         enhanced = Variable(enhanced_image.type(Tensor_gpu))
+        optimizer_g1.zero_grad()
 
-#         optimizer_g1.zero_grad()
+        generated_enhanced_image = generator1(enhanced)
 
-#         generated_enhanced_image = generator1(enhanced)
-
-#         loss = torch.log10(criterion(generated_enhanced_image, enhanced))
-#         loss.backward()
-#         optimizer_g1.step()
+        loss = torch.log10(criterion(generated_enhanced_image, enhanced))
+        loss.backward()
+        optimizer_g1.step()
 
 
-#         # print statistics
-#         running_loss += loss.item()
-#         running_losslist.append(loss.item())
-#         f = open("log_PreTraining.txt","a+")
-#         f.write("[Epoch %d/%d] [Batch %d/%d] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader1), loss.item()))
-#         f.close()
-#         if i % 225 == 224:    # print every 200 mini-batches
-#             print('[%d, %5d] loss: %.5f' % (epoch + 1, i + 1, running_loss / 225))
-#             running_loss = 0.0
-#             save_image(generated_enhanced_image.data[:25], "images/ga1_pretrain_%d_%d.png" % (epoch,i), nrow=5, normalize=True)
-#             torch.save(generator1.state_dict(), './gan1_pretrain_'+ str(epoch) + '_' + str(i) + '.pth')
-# f = open("log_PreTraining_LossList.txt","a+")
-# for item in running_losslist:
-#     f.write('%f\n' % (item))
-# f.close()
+        # print statistics
+        running_loss += loss.item()
+        running_losslist.append(loss.item())
+        f = open("log_PreTraining.txt","a+")
+        f.write("[Epoch %d/%d] [Batch %d/%d] [G loss: %f]\n" % (epoch, NUM_EPOCHS_PRETRAIN , i, len(trainLoader1), loss.item()))
+        f.close()
+        if i % 225 == 224:    # print every 200 mini-batches
+            print('[%d, %5d] loss: %.5f' % (epoch + 1, i + 1, running_loss / 225))
+            running_loss = 0.0
+            save_image(generated_enhanced_image.data[:25], "images/ga1_pretrain_%d_%d.png" % (epoch,i), nrow=5, normalize=True)
+            torch.save(generator1.state_dict(), './gan1_pretrain_'+ str(epoch) + '_' + str(i) + '.pth')
+f = open("log_PreTraining_LossList.txt","a+")
+for item in running_losslist:
+    f.write('%f\n' % (item))
+f.close()
 
 # print("Generator training loop ended")
 # x_vals = np.arange(0, len(running_losslist))
@@ -454,10 +438,11 @@ def discriminatorLoss(d1Real, d1Fake, gradPenalty):
 # plt.savefig('PreTrainLoss')
 
 
+
 ### Training Network
 batches_done = 0
 
-for epoch in range(NUM_EPOCHS*2):
+for epoch in range(NUM_EPOCHS_TRAIN):
     for i, (data, gt1) in enumerate(trainLoader_cross, 0):
         input, dummy = data
         groundTruth, dummy = gt1
@@ -468,43 +453,44 @@ for epoch in range(NUM_EPOCHS*2):
         # print("Training Generator on Iteration: %d" % (i))
             # Generate a batch of images
         optimizer_g1.zero_grad()
-        fake_imgs = generator1(trainInput)
-        residual_learning_output = fake_imgs + trainInput
-        gLoss = computeGeneratorLoss(trainInput,residual_learning_output)
+        fake_imgs = generator1(trainInput) 
+#         res_learn_out = fake_imgs + trainInput
+        
+        gLoss = computeGeneratorLoss(trainInput,fake_imgs)
 
-        gLoss.backward()
+        gLoss.backward(retain_graph=True)
         optimizer_g1.step()
 
         ### TRAIN DISCRIMINATOR
         optimizer_d.zero_grad()
-        fakeImgs = generator1(trainInput)
+        # fakeImgs = generator1(trainInput)
 
         # # Real Images
         realValid = discriminator(realImgs)
         # Fake Images
-        fakeValid = discriminator(fakeImgs)
+        fakeValid = discriminator(fake_imgs)
 
-        gradientPenalty = computeGradientPenalty(discriminator, realImgs.data, fakeImgs.data)
+        gradientPenalty = computeGradientPenalty(discriminator, realImgs.data, fake_imgs.data)
         dLoss = discriminatorLoss(realValid, fakeValid, gradientPenalty)
         dLoss.backward()
         optimizer_d.step()
 
-        print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
-        f = open("log_Train_Weights.txt","a+")
-        f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
+        print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, NUM_EPOCHS_TRAIN , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
+        f = open("log_Train.txt","a+")
+        f.write("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]\n" % (epoch, NUM_EPOCHS_TRAIN , i, len(trainLoader_cross), dLoss.item(), gLoss.item()))
+#         f.write("Validity:%f\n" % (gAdvLoss))
         f.close()
 
         if batches_done % 200 == 0:
-            save_image(fakeImgs.data[:25], "images/1Way_Train_Weights_%d.png" % batches_done, nrow=5, normalize=True)
-            torch.save(generator1.state_dict(), './gan1_train_weights_'+ str(epoch) + '_' + str(i) + '.pth')
-            torch.save(discriminator.state_dict(), './discriminator_train_weights_'+ str(epoch) + '_' + str(i) + '.pth')
+            save_image(fake_imgs.data[:25], "images/1Way_Train_%d.png" % batches_done, nrow=5, normalize=True)
+            torch.save(generator1.state_dict(), './gan1_train_'+ str(epoch) + '_' + str(i) + '.pth')
+            torch.save(discriminator.state_dict(), './discriminator_train_'+ str(epoch) + '_' + str(i) + '.pth')
 
         batches_done += 1
         print("Done training discriminator on iteration: %d" % (i))
 
 
 ## Test Network
-
 with torch.no_grad():
     psnrAvg = 0.0
     for i, (gt, data) in enumerate(testLoader, 0):
@@ -516,8 +502,10 @@ with torch.no_grad():
         loss = criterion(output, realImgs)
         psnr = 10*torch.log10(1/loss)
         psnrAvg += psnr
-        save_image(output.data[:25], "images/1Way_Test_Weights_%d.png" % i, nrow=5, normalize=True)
+        save_image(output.data[:25], "images/1Way_Test_%d.png" % i, nrow=5, normalize=True)
         # for j in range(output.shape[0]):
             # imshowOutput(output[j,...], j)
         print("PSNR Avg: %f" % (psnrAvg / (i+1)))
     print("Final PSNR Avg: %f" % (psnrAvg / len(testLoader)))
+
+
