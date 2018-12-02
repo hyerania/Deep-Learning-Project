@@ -471,7 +471,7 @@ def discriminatorLoss(d1Real, d1Fake, gradPenalty):
 ### Training Network
 dataiter = iter(testLoader)
 data_test, gt_test = dataiter.next()
-input_test, dummy = data
+input_test, dummy = data_test
 testInput = Variable(input_test.type(Tensor_gpu))
 batches_done = 0
 generator_loss = []
