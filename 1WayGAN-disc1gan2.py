@@ -485,7 +485,7 @@ for epoch in range(NUM_EPOCHS_TRAIN):
 
         ### TRAIN DISCRIMINATOR
         optimizer_d.zero_grad()
-        fakeImgs = generator1(trainInput)
+        fake_imgs = generator1(trainInput)
 
         # # Real Images
         realValid = discriminator(realImgs)
