@@ -1,0 +1,14 @@
+## NECESSARY JOB SPECIFICATIONS
+#BSUB -J OneWayGAN
+#BSUB -L /bin/bash
+#BSUB -W 24:00
+#BSUB -n 10
+#BSUB -R "span[ptile=10]"
+#BSUB -R "rusage[mem=10000]"
+#BSUB -M 10000
+#BSUB -R "select[gpu]"
+#BSUB -o OneWayGANOutput.%J
+
+module load Anaconda/3-5.0.0.1 CUDA
+source activate /scratch/user/hernandez.yerania/.conda/envs/deepPhoto
+python Test.py
